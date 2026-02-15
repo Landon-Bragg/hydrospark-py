@@ -1,0 +1,57 @@
+version: '3.8'
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: hydrospark-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: password
+      MYSQL_DATABASE: hydrospark
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./backend/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-ppassword"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build: ./backend
+    container_name: hydrospark-backend
+    ports:
+      - "5001:5000"
+    environment:
+      - DATABASE_URL=mysql+pymysql://root:password@mysql:3306/hydrospark
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - FLASK_ENV=development
+      - GMAIL_USER=conbenlan@gmail.com
+      - GMAIL_APP_PASSWORD=cbl1234567!
+    volumes:
+      - ./backend:/app
+      - ml_models:/app/ml_models
+    depends_on:
+      mysql:
+        condition: service_healthy
+    command: python app.py
+
+  frontend:
+    build: ./frontend
+    container_name: hydrospark-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - REACT_APP_API_URL=http://localhost:5001/api
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      - backend
+    stdin_open: true
+    tty: true
+
+volumes:
+  mysql_data:
+  ml_models:
