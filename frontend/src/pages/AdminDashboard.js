@@ -6,8 +6,10 @@ function AdminDashboard() {
   const [file, setFile] = useState(null);
   const [importing, setImporting] = useState(false);
   const [detectingAnomalies, setDetectingAnomalies] = useState(false);
+  const [generatingBills, setGeneratingBills] = useState(false);
   const [result, setResult] = useState(null);
   const [anomalyResult, setAnomalyResult] = useState(null);
+  const [billResult, setBillResult] = useState(null);
   const [error, setError] = useState(null);
 
   const handleFileChange = (e) => {
@@ -49,7 +51,7 @@ function AdminDashboard() {
     try {
       const token = localStorage.getItem('token');
       const response = await axios.post(
-        'http://localhost:5001/api/alerts/detect',
+        'http://localhost:5001/api/admin/detect',
         {},
         {
           headers: {
@@ -67,21 +69,47 @@ function AdminDashboard() {
     }
   };
 
+  const handleGenerateBills = async () => {
+    setGeneratingBills(true);
+    setError(null);
+    setBillResult(null);
+
+    try {
+      const token = localStorage.getItem('token');
+      const response = await axios.post(
+        'http://localhost:5001/api/admin/generate-historical-bills',
+        {},
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
+      setBillResult(response.data);
+    } catch (err) {
+      setError(err.response?.data?.error || 'Bill generation failed');
+    } finally {
+      setGeneratingBills(false);
+    }
+  };
+
   return (
     <div>
       <h1 className="text-3xl font-bold text-hydro-deep-aqua mb-6">Admin Dashboard</h1>
       
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      {error && (
+        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+          {error}
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {/* Data Import Card */}
         <div className="card">
           <h2 className="text-xl font-semibold mb-4">Data Import</h2>
           <p className="text-gray-600 mb-4">Import CSV/XLSX usage data (max 100MB)</p>
-          
-          {error && (
-            <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
-              {error}
-            </div>
-          )}
           
           {result && (
             <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-4">
@@ -170,6 +198,48 @@ function AdminDashboard() {
               <li>Usage spikes (100%+ above normal)</li>
               <li>Potential leaks (unusual patterns)</li>
               <li>Abnormal consumption</li>
+            </ul>
+          </div>
+        </div>
+
+        {/* Bill Generation Card */}
+        <div className="card">
+          <h2 className="text-xl font-semibold mb-4">Generate Historical Bills</h2>
+          <p className="text-gray-600 mb-4">
+            Generate monthly bills for all customers based on their historical usage data from 2018-2026.
+          </p>
+
+          {billResult && (
+            <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-4">
+              <p className="font-semibold">{billResult.message}</p>
+              <p className="text-sm mt-1">
+                Generated {billResult.total_bills} bills
+              </p>
+            </div>
+          )}
+
+          <button
+            onClick={handleGenerateBills}
+            disabled={generatingBills}
+            className="btn-primary w-full"
+          >
+            {generatingBills ? 'Generating Bills...' : '💰 Generate All Historical Bills'}
+          </button>
+
+          {generatingBills && (
+            <div className="mt-4 text-center">
+              <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-hydro-spark-blue"></div>
+              <p className="text-sm text-gray-600 mt-2">Generating bills for 657 customers... This may take 2-3 minutes</p>
+            </div>
+          )}
+
+          <div className="mt-4 p-3 bg-blue-50 rounded text-sm">
+            <p className="font-semibold text-hydro-deep-aqua mb-1">What this does:</p>
+            <ul className="list-disc list-inside text-gray-700">
+              <li>Creates monthly bills for each customer</li>
+              <li>Calculates usage from 2018-2026</li>
+              <li>Sets status (paid/sent/overdue/pending)</li>
+              <li>Rate: $2.50/CCF for Residential</li>
             </ul>
           </div>
         </div>

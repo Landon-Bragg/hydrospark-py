@@ -146,3 +146,29 @@ def import_usage_data():
         import traceback
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
+    
+@admin_bp.route('/generate-historical-bills', methods=['POST'])
+@jwt_required()
+def generate_historical_bills():
+    """Generate historical bills for all customers (admin only)"""
+    try:
+        user_id = int(get_jwt_identity())
+        user = User.query.get(user_id)
+        
+        if not user or user.role not in ['admin', 'billing']:
+            return jsonify({'error': 'Admin access required'}), 403
+        
+        from services.billing_service import BillingService
+        billing_service = BillingService()
+        
+        print("Starting historical bill generation...")
+        result = billing_service.generate_historical_bills()
+        print(f"Bill generation completed: {result}")
+        
+        return jsonify(result), 200
+        
+    except Exception as e:
+        print(f"Historical bill generation error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500

@@ -2,7 +2,7 @@
 Billing calculation service
 """
 
-from database import db, Customer, WaterUsage, BillingRate
+from database import db, Customer, WaterUsage, BillingRate, Bill
 from datetime import datetime, timedelta
 from sqlalchemy import func
 
@@ -43,7 +43,6 @@ class BillingService:
     def estimate_bill_from_reading(self, customer_id, meter_reading):
         """Estimate bill from current meter reading"""
         # Get last billing period
-        from database import Bill
         last_bill = Bill.query.filter_by(customer_id=customer_id).order_by(
             Bill.billing_period_end.desc()
         ).first()
@@ -71,3 +70,96 @@ class BillingService:
             'estimated_amount': estimated_amount,
             'rate_per_ccf': rate_value
         }
+    
+    def generate_historical_bills(self):
+        """Generate bills for all customers for all historical months"""
+        try:
+            customers = Customer.query.all()
+            total_bills = 0
+            
+            for customer in customers:
+                # Get date range for this customer's data
+                first_usage = WaterUsage.query.filter_by(
+                    customer_id=customer.id
+                ).order_by(WaterUsage.usage_date).first()
+                
+                last_usage = WaterUsage.query.filter_by(
+                    customer_id=customer.id
+                ).order_by(WaterUsage.usage_date.desc()).first()
+                
+                if not first_usage or not last_usage:
+                    continue
+                
+                # Generate monthly bills
+                current_date = first_usage.usage_date.replace(day=1)
+                end_date = last_usage.usage_date
+                
+                while current_date <= end_date:
+                    # Calculate month end
+                    if current_date.month == 12:
+                        month_end = current_date.replace(day=31)
+                    else:
+                        next_month = current_date.replace(month=current_date.month + 1)
+                        month_end = (next_month - timedelta(days=1))
+                    
+                    # Don't exceed data range
+                    if month_end > end_date:
+                        month_end = end_date
+                    
+                    # Check if bill already exists
+                    existing_bill = Bill.query.filter_by(
+                        customer_id=customer.id,
+                        billing_period_start=current_date,
+                        billing_period_end=month_end
+                    ).first()
+                    
+                    if not existing_bill:
+                        # Calculate usage for this period
+                        bill_info = self.calculate_bill(customer.id, current_date, month_end)
+                        
+                        if bill_info and bill_info['total_usage_ccf'] > 0:
+                            # Create bill
+                            due_date = month_end + timedelta(days=15)
+                            
+                            # Determine status based on date
+                            if month_end < datetime.now().date():
+                                if due_date < datetime.now().date():
+                                    status = 'overdue'
+                                else:
+                                    status = 'sent'
+                            else:
+                                status = 'pending'
+                            
+                            bill = Bill(
+                                customer_id=customer.id,
+                                billing_period_start=current_date,
+                                billing_period_end=month_end,
+                                total_usage_ccf=bill_info['total_usage_ccf'],
+                                total_amount=bill_info['total_amount'],
+                                due_date=due_date,
+                                status=status
+                            )
+                            db.session.add(bill)
+                            total_bills += 1
+                    
+                    # Move to next month
+                    if current_date.month == 12:
+                        current_date = current_date.replace(year=current_date.year + 1, month=1)
+                    else:
+                        current_date = current_date.replace(month=current_date.month + 1)
+                
+                # Commit every customer to avoid memory issues
+                db.session.commit()
+                print(f"Generated bills for customer {customer.customer_name}")
+            
+            return {
+                'message': 'Historical bills generated',
+                'total_bills': total_bills
+            }
+            
+        except Exception as e:
+            db.session.rollback()
+            print(f"Bill generation error: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return {'error': str(e)}
