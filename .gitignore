@@ -20,7 +20,6 @@ build/
 .DS_Store
 
 # Database
-*.sql
 mysql_data/
 
 # Uploads
@@ -45,3 +44,6 @@ ml_models/*.joblib
 # OS
 .DS_Store
 Thumbs.db
+
+PROJECT_SUMMARY.md
+QUICKSTART.md
